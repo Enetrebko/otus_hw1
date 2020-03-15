@@ -25,7 +25,7 @@ default_config = {
 }
 
 CORRUPT_PERCENT = 0.2
-LOG_NAME_PATTERN = r'^nginx-access-ui\.log-\d{8}(\.gz|)$'
+LOG_NAME_PATTERN = r'^nginx-access-ui\.log-(\d{8})(\.gz|)$'
 LOG_LINE_PATTERN = r'^(\d|\.)+ .+  .+ \[.+] ".+" \d+ \d+ ".+" ".+" ".+" ".+" \d+\.\d+$'
 
 
@@ -51,40 +51,33 @@ def median(sorted_list):
 
 
 def get_last_log(directory):
-    last_date = '19000101'
-    last_file_name = None
-    last_file_ext = None
+    last_date = last_file_name = last_file_ext = None
     for file_name in listdir(directory):
-        if re.match(LOG_NAME_PATTERN, file_name):
-            file_date = re.search(r'\d{8}', file_name).group(0)
-            if file_date > last_date:
+        match = re.search(LOG_NAME_PATTERN, file_name)
+        if match:
+            file_date = match.group(1)
+            if not last_date or file_date > last_date:
                 last_date = file_date
-                last_file_ext = file_name[28:]
+                last_file_ext = match.group(2)
                 last_file_name = join(directory, file_name)
-    if last_date != '19000101':
-        return last_date, last_file_name, last_file_ext
-    else:
-        return
+    return last_date, last_file_name, last_file_ext
 
 
 def parse(log_file):
     for line in log_file:
         line = str(line, 'utf8')
-        if not re.match(LOG_LINE_PATTERN, line):
-            yield None, None
-        else:
+        url = request_time = None
+        if re.match(LOG_LINE_PATTERN, line):
             url_start = line.find(' ', line.find('"') + 1) + 1
             url_end = line.find(' ', url_start)
             url = line[url_start: url_end]
             request_time = float(line[line.rfind(' ') + 1:])
-            yield url, request_time
+        yield url, request_time
 
 
 def get_urls_info(log_file):
     url_info = dict()
-    total_cnt = 0
-    total_time = 0
-    corrupted_cnt = 0
+    total_cnt = total_time = corrupted_cnt = 0
     lines = parse(log_file)
     for url, request_time in lines:
         if url:
@@ -117,34 +110,26 @@ def get_stat(url_info, total_cnt, total_time, report_size):
     return table_stat[:report_size]
 
 
-def get_report_name(report_date):
-    try:
-        report_date = datetime.strptime(report_date, '%Y%m%d').strftime('%Y.%d.%m')
+def get_report_name(log_date):
+    if log_date:
+        report_date = datetime.strptime(log_date, '%Y%m%d').strftime('%Y.%m.%d')
         return f'report-{report_date}.html'
-    except ValueError as e:
-        raise e
 
 
 def generate_report(table_stat, report_name):
-    try:
-        with open('report.html', 'r') as report_template:
-            template_text = report_template.read()
-            report_text = Template(template_text).safe_substitute(table_json=table_stat)
-        with open(join(default_config['REPORT_DIR'], report_name), 'w+') as report:
-            report.write(report_text)
-    except FileNotFoundError as e:
-        raise e
+    with open('report.html', 'r') as report_template:
+        template_text = report_template.read()
+        report_text = Template(template_text).safe_substitute(table_json=table_stat)
+    with open(join(default_config['REPORT_DIR'], report_name), 'w+') as report:
+        report.write(report_text)
 
 
 def get_config(config, config_file_path):
-    try:
-        with open(config_file_path) as config_file:
-            if stat(config_file_path).st_size != 0:
-                config_from_file = json.load(config_file)
-            else:
-                config_from_file = {}
-    except Exception as e:
-        raise e
+    with open(config_file_path) as config_file:
+        if stat(config_file_path).st_size != 0:
+            config_from_file = json.load(config_file)
+        else:
+            config_from_file = {}
     config.update(config_from_file)
     return config
 
@@ -169,25 +154,22 @@ def main(config):
         logger = get_logger(app_log_file)
         report_dir, log_dir, report_size = config['REPORT_DIR'], config['LOG_DIR'], config['REPORT_SIZE']
         logger.info(msg='Start working')
-        if get_last_log(log_dir):
-            log_date, log_name, log_ext = get_last_log(log_dir)
-            report_name = get_report_name(log_date)
-            if not exists(join(report_dir, report_name)):
-                log = gzip.open(log_name) if log_ext == '.gz' else open(log_name)
-                urls, total_cnt, corrupted_cnt, total_time = get_urls_info(log)
-                if corrupted_cnt / total_cnt > CORRUPT_PERCENT:
-                    logger.info(msg='Too much corrupted lines')
-                else:
-                    table_stat = get_stat(urls, total_cnt, total_time, report_size)
-                    generate_report(table_stat, report_name)
-                    logger.info(msg='Done')
-                log.close()
-            else:
-                logger.info(msg='Report already exists')
-        else:
+        log_date, log_name, log_ext = get_last_log(log_dir)
+        report_name = get_report_name(log_date)
+        if not log_date:
             logger.info(msg='No logs to process')
-    except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
-        raise e
+        elif exists(join(report_dir, report_name)):
+            logger.info(msg='Report already exists')
+        else:
+            log = gzip.open(log_name) if log_ext == '.gz' else open(log_name)
+            urls, total_cnt, corrupted_cnt, total_time = get_urls_info(log)
+            if corrupted_cnt / total_cnt > CORRUPT_PERCENT:
+                logger.info(msg='Too much corrupted lines')
+            else:
+                table_stat = get_stat(urls, total_cnt, total_time, report_size)
+                generate_report(table_stat, report_name)
+                logger.info(msg='Done')
+            log.close()
     except KeyboardInterrupt as e:
         logger.exception(e, exc_info=True)
     except Exception as e:
