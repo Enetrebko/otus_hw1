@@ -44,10 +44,8 @@ def insert_sorted(sorted_list, new_elem):
 
 
 def median(sorted_list):
-    if len(sorted_list) > 1:
+    if len(sorted_list) > 0:
         return (sorted_list[(len(sorted_list) - 1) // 2] + sorted_list[len(sorted_list) // 2]) / 2
-    else:
-        return sorted_list[0]
 
 
 def get_last_log(directory):
