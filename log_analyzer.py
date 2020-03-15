@@ -123,10 +123,7 @@ def generate_report(table_stat, report_name):
 
 def get_config(config, config_file_path):
     with open(config_file_path) as config_file:
-        if stat(config_file_path).st_size != 0:
-            config_from_file = json.load(config_file)
-        else:
-            config_from_file = {}
+        config_from_file = json.load(config_file) if stat(config_file_path).st_size != 0 else {}
     config.update(config_from_file)
     return config
 
