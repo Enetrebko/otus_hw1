@@ -134,15 +134,6 @@ def get_config(config, config_file_path):
     return config
 
 
-def get_logger(app_log_file):
-    logging.basicConfig(format='[%(asctime)s] %(levelname).1s %(message)s',
-                        level='INFO',
-                        datefmt='%Y.%m.%d %H:%M:%S',
-                        filename=app_log_file)
-    logger = logging.getLogger(__name__)
-    return logger
-
-
 def main(config):
     try:
         parser = argparse.ArgumentParser()
@@ -151,29 +142,32 @@ def main(config):
         config_path = args.config
         config = get_config(config, config_path)
         app_log_file = config['APP_LOGFILE']
-        logger = get_logger(app_log_file)
+        logging.basicConfig(format='[%(asctime)s] %(levelname).1s %(message)s',
+                            level='INFO',
+                            datefmt='%Y.%m.%d %H:%M:%S',
+                            filename=app_log_file)
         report_dir, log_dir, report_size = config['REPORT_DIR'], config['LOG_DIR'], config['REPORT_SIZE']
-        logger.info(msg='Start working')
+        logging.info(msg='Start working')
         log_date, log_name, log_ext = get_last_log(log_dir)
         report_name = get_report_name(log_date)
         if not log_date:
-            logger.info(msg='No logs to process')
+            logging.info(msg='No logs to process')
         elif exists(join(report_dir, report_name)):
-            logger.info(msg='Report already exists')
+            logging.info(msg='Report already exists')
         else:
             log = gzip.open(log_name) if log_ext == '.gz' else open(log_name)
             urls, total_cnt, corrupted_cnt, total_time = get_urls_info(log)
             if corrupted_cnt / total_cnt > CORRUPT_PERCENT:
-                logger.info(msg='Too much corrupted lines')
+                logging.info(msg='Too much corrupted lines')
             else:
                 table_stat = get_stat(urls, total_cnt, total_time, report_size)
                 generate_report(table_stat, report_name)
-                logger.info(msg='Done')
+                logging.info(msg='Done')
             log.close()
     except KeyboardInterrupt as e:
-        logger.exception(e, exc_info=True)
+        logging.exception(e, exc_info=True)
     except Exception as e:
-        logger.exception(e, exc_info=True)
+        logging.exception(e, exc_info=True)
 
 
 if __name__ == "__main__":
