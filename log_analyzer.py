@@ -80,14 +80,13 @@ def get_urls_info(log_file):
     total_cnt = total_time = corrupted_cnt = 0
     lines = parse(log_file)
     for url, request_time in lines:
-        if url:
-            if url not in url_info.keys():
-                url_info[url] = [request_time]
-            else:
-                url_info[url] = insert_sorted(url_info[url], request_time)
-            total_time += request_time
-        else:
+        if not url:
             corrupted_cnt += 1
+        elif url not in url_info.keys():
+            url_info[url] = [request_time]
+        else:
+            url_info[url] = insert_sorted(url_info[url], request_time)
+        total_time += request_time
         total_cnt += 1
     return url_info, total_cnt, corrupted_cnt, total_time
 
