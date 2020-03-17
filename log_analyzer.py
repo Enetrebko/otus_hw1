@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 from datetime import datetime
+from collections import namedtuple
 
 
 default_config = {
@@ -49,6 +50,7 @@ def median(sorted_list):
 
 
 def get_last_log(directory):
+    last_log_info = namedtuple('log_info', 'date file_name file_ext')
     last_date = last_file_name = last_file_ext = None
     for file_name in listdir(directory):
         match = re.search(LOG_NAME_PATTERN, file_name)
@@ -58,7 +60,7 @@ def get_last_log(directory):
                 last_date = file_date
                 last_file_ext = match.group(2)
                 last_file_name = join(directory, file_name)
-    return last_date, last_file_name, last_file_ext
+    return last_log_info(last_date, last_file_name, last_file_ext)
 
 
 def parse(log_file):
@@ -140,23 +142,23 @@ def main(config):
                             level='INFO',
                             datefmt='%Y.%m.%d %H:%M:%S',
                             filename=app_log_file)
-        report_dir, log_dir, report_size = config['REPORT_DIR'], config['LOG_DIR'], config['REPORT_SIZE']
-        logging.info(msg='Start working')
-        log_date, log_name, log_ext = get_last_log(log_dir)
-        report_name = get_report_name(log_date)
-        if not log_date:
-            logging.info(msg='No logs to process')
-        elif exists(join(report_dir, report_name)):
-            logging.info(msg='Report already exists')
+        logging.info('Start working')
+        last_log_info = get_last_log(config['LOG_DIR'])
+        report_name = get_report_name(last_log_info.date)
+        if not last_log_info.date:
+            logging.info('No logs to process')
+        elif exists(join(config['REPORT_DIR'], report_name)):
+            logging.info('Report already exists')
         else:
-            log = gzip.open(log_name) if log_ext == '.gz' else open(log_name)
+            file_open = gzip.open if last_log_info.file_ext == '.gz' else open
+            log = file_open(last_log_info.file_name)
             urls, total_cnt, corrupted_cnt, total_time = get_urls_info(log)
             if corrupted_cnt / total_cnt > CORRUPT_PERCENT:
-                logging.info(msg='Too much corrupted lines')
+                logging.info('Too much corrupted lines')
             else:
-                table_stat = get_stat(urls, total_cnt, total_time, report_size)
+                table_stat = get_stat(urls, total_cnt, total_time, config['REPORT_SIZE'])
                 generate_report(table_stat, report_name)
-                logging.info(msg='Done')
+                logging.info('Done')
             log.close()
     except KeyboardInterrupt as e:
         logging.exception(e, exc_info=True)
